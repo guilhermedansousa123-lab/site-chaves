@@ -1,58 +1,98 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+## Controle de Chaves
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Aplicação web para cadastrar chaves, registrar empréstimos e acompanhar devoluções. A interface usa Blade e Bootstrap 5; os registros ficam no banco configurado pelo Laravel.
 
-## About Laravel
+### Tecnologias e requisitos
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.3 ou superior e Composer.
+- Laravel 13, Sanctum 4 e banco SQL compatível (SQLite ou MySQL).
+- Node.js e npm são necessários somente para compilar os assets Vite existentes no projeto.
+- Bootstrap 5.3 e Bootstrap Icons são carregados por CDN.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
-
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
-
-## Learning Laravel
-
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
-
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+### Instalação e banco
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+composer install
+copy .env.example .env
+php artisan key:generate
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Configure `.env` para o banco local. Para MySQL, ajuste `DB_CONNECTION`, `DB_HOST`, `DB_PORT`, `DB_DATABASE`, `DB_USERNAME` e `DB_PASSWORD`. Crie o banco antes de executar as migrations. Para SQLite, defina `DB_CONNECTION=sqlite` e `DB_DATABASE` com o caminho do arquivo.
 
-## Contributing
+```bash
+php artisan migrate
+php artisan db:seed
+php artisan serve
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+O seed atual cria a conta de desenvolvimento `test@example.com` com senha `password`, herdada da factory do projeto. Use-a apenas em ambiente local; substitua/remova essa conta antes de publicar a aplicação. Para compilar os assets existentes, execute `npm install` e `npm run build`.
 
-## Code of Conduct
+As migrations novas são aditivas: `keys` armazena `name` único e `place`; `loans` referencia `keys.id`, com responsável, observação opcional e datas de empréstimo/devolução. A chave estrangeira impede excluir chaves com histórico. Não há migrations de alteração ou remoção das tabelas existentes.
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+### Interface
 
-## Security Vulnerabilities
+- `/login`: autenticação por sessão Laravel.
+- `/`: painel com totais e movimentações recentes.
+- `/keys`: listagem paginada, pesquisa, cadastro, edição e exclusão confirmada.
+- `/loans`: histórico paginado, registro de empréstimo e ação para registrar devolução.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+As páginas de operação exigem autenticação. A tela não aceita mais credenciais arbitrárias nem mantém os cadastros no `localStorage`.
 
-## License
+### API REST v1
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Obtenha um token com as credenciais de uma conta existente. Envie `Accept: application/json`; para JSON, envie também `Content-Type: application/json`.
+
+```http
+POST /api/v1/token
+Content-Type: application/json
+Accept: application/json
+
+{"email":"test@example.com","password":"password","device_name":"Thunder Client"}
+```
+
+A resposta `201` inclui `data.access_token`. Nas demais rotas, use `Authorization: Bearer <token>`. `DELETE /api/v1/token` revoga o token atual.
+
+| Método | Endpoint | Descrição |
+| --- | --- | --- |
+| GET | `/api/v1/keys?search=recepcao&status=available&per_page=15` | Lista chaves; filtros opcionais `search`, `status=available` ou `loaned` e `per_page` (máx. 100). |
+| GET | `/api/v1/keys/{id}` | Consulta chave. |
+| POST | `/api/v1/keys` | Cria chave: `name`, `place`. |
+| PUT/PATCH | `/api/v1/keys/{id}` | Atualiza chave; PUT exige os dois campos, PATCH aceita campos parciais. |
+| DELETE | `/api/v1/keys/{id}` | Exclui chave sem movimentações; caso contrário retorna 409. |
+| GET | `/api/v1/loans?status=open&search=ana&per_page=15` | Lista empréstimos; filtros `status=open` ou `returned`, `search` pelo responsável e `per_page`. |
+| GET | `/api/v1/loans/{id}` | Consulta empréstimo e chave associada. |
+| POST | `/api/v1/loans` | Cria empréstimo: `key_id`, `person`, `note` opcional. |
+| PUT/PATCH | `/api/v1/loans/{id}` | Atualiza empréstimo em aberto. PUT exige `key_id`, `person` e `note`; PATCH aceita campos parciais. |
+| POST | `/api/v1/loans/{id}/return` | Registra devolução e mantém o histórico. |
+| DELETE | `/api/v1/loans/{id}` | Cancela empréstimo aberto; histórico concluído não pode ser excluído (409). |
+
+Exemplo de empréstimo:
+
+```json
+{
+  "key_id": 1,
+  "person": "Ana Silva",
+  "note": "Reunião na sala 2"
+}
+```
+
+Respostas de recurso seguem o envelope `{"data": {...}}`; listas paginadas incluem `data`, `links` e `meta`. O POST retorna 201, leitura/atualização 200 e exclusão 204. Erros comuns: 401 sem token, 404 para ID ausente, 409 para conflito de negócio e 422 para validação. Usuários e tabelas internas do Laravel não são recursos CRUD da API.
+
+Exemplo de erro de validação (422):
+
+```json
+{
+  "message": "The name field is required.",
+  "errors": { "name": ["The name field is required."] }
+}
+```
+
+Conflito de negócio (409) retorna uma mensagem como `A chave já está emprestada.`.
+
+### Thunder Client
+
+Importe `thunder-tests/thunder-collection_Controle-de-Chaves.json` no Thunder Client. Importe `thunder-tests/guizin.local.env.example` como ambiente e selecione-o. A coleção inclui autenticação, CRUD, IDs ausentes, campos obrigatórios e referência inválida. Depois de criar token, copie `data.access_token` para `token`; atualize `keyId` e `loanId` com IDs reais. Execute exclusões somente em registros de teste. A extensão Thunder Client não foi executada neste ambiente.
+
+### Verificação
+
+Execute `php artisan test --compact`. Os testes usam SQLite em memória conforme `phpunit.xml`, não o banco local configurado em `.env`.
